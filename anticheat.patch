@@ -1,38 +1,190 @@
-diff -r 9bbeba59a2ec src/server/game/Chat/Chat.cpp
---- a/src/server/game/Chat/Chat.cpp     Sun Oct 31 22:37:54 2010 +0100
-+++ b/src/server/game/Chat/Chat.cpp     Sun Oct 31 19:38:02 2010 -0300
-@@ -802,6 +802,7 @@
-         { "bindsight",      SEC_ADMINISTRATOR,  false, &ChatHandler::HandleBindSightCommand,           "", NULL },
-         { "unbindsight",    SEC_ADMINISTRATOR,  false, &ChatHandler::HandleUnbindSightCommand,         "", NULL },
-         { "playall",        SEC_GAMEMASTER,  false, &ChatHandler::HandlePlayAllCommand,             "", NULL },
-+        { "anticheat",      SEC_GAMEMASTER,     false, &ChatHandler::HandleAntiCheatCommand,        "", NULL },
+diff -r a168ad157489 src/server/game/Chat/Chat.cpp
+--- a/src/server/game/Chat/Chat.cpp	Fri Nov 05 00:54:17 2010 +0200
++++ b/src/server/game/Chat/Chat.cpp	Thu Nov 04 22:44:44 2010 -0300
+@@ -726,6 +726,15 @@
+         { NULL,             0,                  false, NULL,                                            "", NULL }
+     };
+ 
++    static ChatCommand anticheatCommandTable[] =
++    {
++        { "global",         SEC_ADMINISTRATOR,     false,  OldHandler<&ChatHandler::HandleAntiCheatGlobalCommand>,         "", NULL },
++        { "player",         SEC_ADMINISTRATOR,     false,  OldHandler<&ChatHandler::HandleAntiCheatPlayerCommand>,         "", NULL },
++        { "delete",         SEC_ADMINISTRATOR,     false,  OldHandler<&ChatHandler::HandleAntiCheatDeleteCommand>,         "", NULL },
++        { "handle",         SEC_ADMINISTRATOR,     false,  OldHandler<&ChatHandler::HandleAntiCheatHandleCommand>,         "", NULL },
++        { NULL,             0,                     false, NULL,                                           "", NULL }
++    };
++
+     static ChatCommand commandTable[] =
+     {
+         { "account",        SEC_PLAYER,         true,  NULL,                                           "", accountCommandTable  },
+@@ -829,6 +838,7 @@
+         { "bindsight",      SEC_ADMINISTRATOR,  false, OldHandler<&ChatHandler::HandleBindSightCommand>,           "", NULL },
+         { "unbindsight",    SEC_ADMINISTRATOR,  false, OldHandler<&ChatHandler::HandleUnbindSightCommand>,         "", NULL },
+         { "playall",        SEC_GAMEMASTER,  false, OldHandler<&ChatHandler::HandlePlayAllCommand>,             "", NULL },
++        { "anticheat",      SEC_GAMEMASTER,     false, NULL,                                        "",  anticheatCommandTable},
          { NULL,             0,                  false, NULL,                                           "", NULL }
      };
  
-diff -r 9bbeba59a2ec src/server/game/Chat/Chat.h
---- a/src/server/game/Chat/Chat.h       Sun Oct 31 22:37:54 2010 +0100
-+++ b/src/server/game/Chat/Chat.h       Sun Oct 31 19:38:02 2010 -0300
-@@ -607,6 +607,8 @@
+diff -r a168ad157489 src/server/game/Chat/Chat.h
+--- a/src/server/game/Chat/Chat.h	Fri Nov 05 00:54:17 2010 +0200
++++ b/src/server/game/Chat/Chat.h	Thu Nov 04 22:44:44 2010 -0300
+@@ -606,6 +606,12 @@
          bool HandleTempGameObjectCommand(const char* args);
          bool HandleTempAddSpwCommand(const char* args);
  
-+        bool HandleAntiCheatCommand(const char* args);
++        // ANTICHEAT
++        bool HandleAntiCheatGlobalCommand(const char* args); // top3 : Amount || Average || (Amount && Average)
++        bool HandleAntiCheatPlayerCommand(const char* args); // returns especific player's average and amount
++        bool HandleAntiCheatDeleteCommand(const char* args); // if no player name as parameter, deletes all logs else deletes specific player's log
++        bool HandleAntiCheatHandleCommand(const char* args); // turn it on, turn it off 
 +
          //! Development Commands
  
          /*bool HandleQuestAdd(const char * args);
-diff -r 9bbeba59a2ec src/server/game/Chat/Commands/Level3.cpp
---- a/src/server/game/Chat/Commands/Level3.cpp  Sun Oct 31 22:37:54 2010 +0100
-+++ b/src/server/game/Chat/Commands/Level3.cpp  Sun Oct 31 19:38:02 2010 -0300
-@@ -7408,6 +7408,28 @@
+diff -r a168ad157489 src/server/game/Chat/Commands/Level3.cpp
+--- a/src/server/game/Chat/Commands/Level3.cpp	Fri Nov 05 00:54:17 2010 +0200
++++ b/src/server/game/Chat/Commands/Level3.cpp	Thu Nov 04 22:44:44 2010 -0300
+@@ -7408,6 +7408,180 @@
      return true;
  }
  
-+bool ChatHandler::HandleAntiCheatCommand(const char *args)
++bool ChatHandler::HandleAntiCheatDeleteCommand(const char *args)
++{
++    std::string strCommand;
++
++    char* command = strtok((char*)args, " "); //get entered name
++
++    if (!command)
++        return true;
++    
++    strCommand = command;
++    
++    if (strCommand.compare("deleteall") == 0)
++    {
++        uint8 uiStmt[3] = {CHAR_ANTICHEAT_CLEAN_CHEAT_FIRST_REPORT,CHAR_ANTICHEAT_CLEAN_CHEATERS_TEMP, CHAR_ANTICHEAT_CLEAN_CHEATERS };
++        for (uint8 uiI = 0; uiI < 3; uiI++)
++        {
++            PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(uiStmt[uiI]);
++            CharacterDatabase.Execute(stmt);
++        }
++
++    } else
++    {
++        normalizePlayerName(strCommand);
++        Player* pPlayer = sObjectMgr.GetPlayer(strCommand.c_str()); //get player by name
++
++        if (!pPlayer)
++            PSendSysMessage("Player doesn't exist");
++        else
++        {
++            uint8 uiStmt[3] = {CHAR_ANTICHEAT_DEL_CHEATERS, CHAR_ANTICHEAT_DEL_CHEATERS_TEMP,CHAR_ANTICHEAT_DEL_CHEAT_FIRST_REPORT};
++
++            for (uint8 uiI = 0; uiI < 3; uiI++)
++            {
++                PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(uiStmt[uiI]);
++                stmt->setUInt64(0, pPlayer->GetGUIDLow());
++                CharacterDatabase.Execute(stmt);
++            }
++        }
++    }
++
++    return true;
++}
++
++bool ChatHandler::HandleAntiCheatPlayerCommand(const char *args)
++{
++    std::string strCommand;
++
++    char* command = strtok((char*)args, " ");
++
++    uint32 uiGUID = 0;
++    Player* pPlayer = NULL;
++    
++    if (command)
++    {
++        strCommand = command;
++
++        normalizePlayerName(strCommand);
++
++        pPlayer = sObjectMgr.GetPlayer(strCommand.c_str()); //get player by name
++
++        if (pPlayer)
++            uiGUID = pPlayer->GetGUIDLow();
++    }else 
++    {
++        pPlayer = getSelectedPlayer();
++        if (pPlayer)
++            uiGUID = pPlayer->GetGUIDLow();  
++    }
++
++    if (uiGUID == 0)
++    {
++        PSendSysMessage("There is no player.");
++        return true;
++    }
++    
++    PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_GET_CHEATERS_BY_GUID);
++    stmt->setUInt32(0,uiGUID);
++    PreparedQueryResult result = CharacterDatabase.Query(stmt);
++
++    if (result)
++    {
++        do
++        {
++            Field* fields=result->Fetch();
++            uint32 warnings = fields[0].GetUInt32();
++            PSendSysMessage("Amount: %u", warnings);
++        }
++        while (result->NextRow());
++    } else
++        PSendSysMessage("Player's amount log is empty!.");
++
++    stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_GET_CHEATERS_AVERAGE_BY_GUID);
++    stmt->setUInt32(0,uiGUID);
++    result = CharacterDatabase.Query(stmt);
++
++    if (result)
++    {
++        do
++        {
++            Field* fields=result->Fetch();
++            uint32 average = fields[0].GetUInt32();
++            uint32 warnings = fields[1].GetUInt32();
++
++            PSendSysMessage("Average: %u Warnings: %u", average, warnings);
++        }
++        while (result->NextRow());
++    } else
++        PSendSysMessage("Player's average log is empty!.");
++
++    return true;
++}
++
++bool ChatHandler::HandleAntiCheatHandleCommand(const char *args)
++{
++    std::string strCommand;
++
++    char* command = strtok((char*)args, " ");
++    
++    if (!command)
++        return true;
++
++    strCommand = command;
++
++    if (strCommand.compare("on") == 0)
++        sWorld.setBoolConfig(CONFIG_ANTICHEAT_ENABLE,true);
++    else if (strCommand.compare("off") == 0)
++        sWorld.setBoolConfig(CONFIG_ANTICHEAT_ENABLE,false);
++
++    return true;
++}
++
++bool ChatHandler::HandleAntiCheatGlobalCommand(const char *args)
 +{
 +    PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_GET_CHEATERS);
 +    PreparedQueryResult result = CharacterDatabase.Query(stmt);
 +
++    PSendSysMessage("Cheaters by Amount: -------------");
 +    if (result)
 +    {
 +        do
@@ -45,7 +197,27 @@ diff -r 9bbeba59a2ec src/server/game/Chat/Commands/Level3.cpp
 +        }
 +        while (result->NextRow());
 +    } else
-+        PSendSysMessage("Cheaters log empty!.");
++        PSendSysMessage("Cheaters amount log empty!.");
++
++    PSendSysMessage("Cheaters by Average: -------------");
++
++    stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_GET_CHEATERS_AVERAGE);
++    result = CharacterDatabase.Query(stmt);
++
++    if (result)
++    {
++        do
++        {
++            Field* fields=result->Fetch();
++            std::string name = fields[0].GetCString();
++            uint32 average = fields[1].GetUInt32();
++            uint32 warnings = fields[2].GetUInt32();
++
++            PSendSysMessage("Name: %s  Average: %u Warnings: %u", name.c_str(), average, warnings);
++        }
++        while (result->NextRow());
++    } else
++        PSendSysMessage("Cheaters average log empty!.");
 +
 +    return true;
 +}
@@ -53,13 +225,52 @@ diff -r 9bbeba59a2ec src/server/game/Chat/Commands/Level3.cpp
  bool ChatHandler::HandleFreezeCommand(const char *args)
  {
      std::string name;
-diff -r 9bbeba59a2ec src/server/game/Entities/Player/Player.cpp
---- a/src/server/game/Entities/Player/Player.cpp        Sun Oct 31 22:37:54 2010 +0100
-+++ b/src/server/game/Entities/Player/Player.cpp        Sun Oct 31 19:38:02 2010 -0300
-@@ -654,6 +654,42 @@
+diff -r a168ad157489 src/server/game/Entities/Player/Player.cpp
+--- a/src/server/game/Entities/Player/Player.cpp	Fri Nov 05 00:54:17 2010 +0200
++++ b/src/server/game/Entities/Player/Player.cpp	Thu Nov 04 22:44:44 2010 -0300
+@@ -619,6 +619,9 @@
+ 
+ Player::~Player ()
+ {
++    // anticheat
++    CleanTempCheatReports();
++
+     // it must be unloaded already in PlayerLogout and accessed only for loggined player
+     //m_social = NULL;
+ 
+@@ -654,6 +657,89 @@
      sWorld.DecreasePlayerCount();
  }
  
++bool Player::HasFirstReport()
++{
++    PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_GET_CHEAT_FIRST_REPORT);
++    stmt->setUInt64(0,GetGUIDLow());
++
++    PreparedQueryResult result = CharacterDatabase.Query(stmt);
++
++    if (result)
++        return true;
++    else 
++        return false;
++}
++
++void Player::CleanTempCheatReports()
++{
++    for (uint8 uiI = 0; uiI < 2; uiI++)
++    {
++        PreparedStatement* stmt;
++
++        if (uiI == 0)
++            stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_DEL_CHEAT_FIRST_REPORT);
++        else 
++            stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_DEL_CHEATERS_TEMP); 
++
++        stmt->setUInt64(0,GetGUIDLow());
++        CharacterDatabase.Execute(stmt);
++    }
++}
++
 +void Player::ElaborateCheatReport(Player* pPlayer, uint8 uiCheatType)
 +{
 +    if (!pPlayer)
@@ -82,49 +293,70 @@ diff -r 9bbeba59a2ec src/server/game/Entities/Player/Player.cpp
 +        strReportType = "";
 +        break;
 +    }
++
++    if (!HasFirstReport())
++    {
++        PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_SET_CHEAT_FIRST_REPORT);
++        stmt->setUInt64(0,GetGUIDLow());
++        stmt->setString(1,GetName());
++        stmt->setUInt64(2, uint64(time(NULL)));
++        CharacterDatabase.Execute(stmt);
++    }
 +    
-+    PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_SET_CHEATERS);
-+    stmt->setUInt64(0,GetGUIDLow());
-+    stmt->setString(1,GetName());
-+    stmt->setUInt32(2,GetMapId());
-+    stmt->setFloat(3,GetPositionX());
-+    stmt->setFloat(4,GetPositionY());
-+    stmt->setFloat(5,GetPositionZ());
-+    std::ostringstream ss;
-+    ss << strReportType << " " << TimeToTimestampStr(sWorld.GetGameTime());
-+    stmt->setString(6,ss.str());
-+    CharacterDatabase.Execute(stmt);
++    for (uint8 uiI = 0; uiI < 2; uiI++)
++    {
++        PreparedStatement* stmt;
++
++        if (uiI == 0)
++            stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_SET_CHEATERS);
++        else 
++            stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_SET_CHEATERS_TEMP);
++
++        stmt->setUInt64(0,GetGUIDLow());
++        stmt->setString(1,GetName());
++        stmt->setUInt32(2,GetMapId());
++        stmt->setFloat(3,GetPositionX());
++        stmt->setFloat(4,GetPositionY());
++        stmt->setFloat(5,GetPositionZ());
++        stmt->setString(6,strReportType);
++        stmt->setUInt64(7, uint64(time(NULL)));
++        CharacterDatabase.Execute(stmt);
++    }
++
 +}
 +
  void Player::CleanupsBeforeDelete(bool finalCleanup)
  {
      TradeCancel(false);
-@@ -20061,6 +20097,21 @@
+@@ -20061,6 +20147,24 @@
      }
  }
  
 +bool Player::CanFlyAnticheat(MovementInfo& pMovementInfo)
 +{
++    if (IsUnderWater())
++        return false;
++
 +    if (HasAuraType(SPELL_AURA_FLY) || HasAuraType(SPELL_AURA_WATER_WALK) || HasAuraType(SPELL_AURA_MOD_INCREASE_MOUNTED_FLIGHT_SPEED) || HasAuraType(SPELL_AURA_MOD_INCREASE_FLIGHT_SPEED))
-+        return true;
++        return false;
 +
 +    if (Creature* pCreature = GetVehicleCreatureBase())
 +        if (pCreature->GetCreatureInfo()->InhabitType & INHABIT_AIR)
-+            return true;
++            return false;
 +
 +    if (HasUnitMovementFlag(MOVEMENTFLAG_JUMPING) ||  pMovementInfo.HasMovementFlag(MOVEMENTFLAG_JUMPING) || GetMap()->GetGameObject(pMovementInfo.t_guid))
-+        return true;
++        return false;
 +
-+    return false;
++    return true;
 +}
 +
  void Player::UpdatePvPState(bool onlyFFA)
  {
      // TODO: should we always synchronize UNIT_FIELD_BYTES_2, 1 of controller and controlled?
-diff -r 9bbeba59a2ec src/server/game/Entities/Player/Player.h
---- a/src/server/game/Entities/Player/Player.h  Sun Oct 31 22:37:54 2010 +0100
-+++ b/src/server/game/Entities/Player/Player.h  Sun Oct 31 19:38:02 2010 -0300
-@@ -2383,6 +2383,15 @@
+diff -r a168ad157489 src/server/game/Entities/Player/Player.h
+--- a/src/server/game/Entities/Player/Player.h	Fri Nov 05 00:54:17 2010 +0200
++++ b/src/server/game/Entities/Player/Player.h	Thu Nov 04 22:44:44 2010 -0300
+@@ -2383,6 +2383,17 @@
          float GetAverageItemLevel();
          bool isDebugAreaTriggers;
  
@@ -137,10 +369,12 @@ diff -r 9bbeba59a2ec src/server/game/Entities/Player/Player.h
 +        void SetLastSpeedRate(float fSpeedRateRate) { fLastSpeedRate = fSpeedRateRate; }
 +        void ElaborateCheatReport(Player* pPlayer, uint8 uiReportType);
 +        bool CanFlyAnticheat(MovementInfo& pMovementInfo);
++        bool HasFirstReport();
++        void CleanTempCheatReports();
      protected:
          uint32 m_AreaID;
          uint32 m_regenTimerCount;
-@@ -2624,6 +2633,12 @@
+@@ -2624,6 +2635,12 @@
          Runes *m_runes;
          EquipmentSets m_EquipmentSets;
      private:
@@ -153,10 +387,10 @@ diff -r 9bbeba59a2ec src/server/game/Entities/Player/Player.h
          // internal common parts for CanStore/StoreItem functions
          uint8 _CanStoreItem_InSpecificSlot(uint8 bag, uint8 slot, ItemPosCountVec& dest, ItemPrototype const *pProto, uint32& count, bool swap, Item *pSrcItem) const;
          uint8 _CanStoreItem_InBag(uint8 bag, ItemPosCountVec& dest, ItemPrototype const *pProto, uint32& count, bool merge, bool non_specialized, Item *pSrcItem, uint8 skip_bag, uint8 skip_slot) const;
-diff -r 9bbeba59a2ec src/server/game/Server/Protocol/Handlers/MovementHandler.cpp
---- a/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp      Sun Oct 31 22:37:54 2010 +0100
-+++ b/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp      Sun Oct 31 19:38:02 2010 -0300
-@@ -340,6 +340,91 @@
+diff -r a168ad157489 src/server/game/Server/Protocol/Handlers/MovementHandler.cpp
+--- a/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp	Fri Nov 05 00:54:17 2010 +0200
++++ b/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp	Thu Nov 04 22:44:44 2010 -0300
+@@ -340,6 +340,92 @@
      }
  
      /*----------------------*/
@@ -165,28 +399,15 @@ diff -r 9bbeba59a2ec src/server/game/Server/Protocol/Handlers/MovementHandler.cp
 +    if (sWorld.getBoolConfig(CONFIG_ANTICHEAT_ENABLE))
 +    {
 +        if (plMover && 
-+            plMover->GetLastPacketTime() > 0 &&
-+            movementInfo.GetMovementFlags() == plMover->GetUnitMovementFlags() && 
-+            opcode == MSG_MOVE_HEARTBEAT &&
-+            !plMover->IsInWater() && 
 +            !plMover->isInFlight() && 
-+            !plMover->GetTransport() && 
-+            !plMover->GetVehicle() && 
++            !plMover->GetTransport() &&
 +            !plMover->IsBeingTeleported() &&
 +            plMover->CanFreeMove() &&
-+            plMover->GetMotionMaster()->GetCurrentMovementGeneratorType() != TARGETED_MOTION_TYPE &&
 +            !plMover->isGameMaster())
 +        {
-+            uint8 uiMoveType = 0;
-+
-+            if (plMover->IsFlying())
-+                uiMoveType = MOVE_FLIGHT;
-+            else
-+                uiMoveType = MOVE_RUN;
-+
 +            // fly hack detection
 +            // PosZ is checked to see if the player is going up when it should not.
-+            if (!plMover->CanFlyAnticheat(movementInfo))
++            if (plMover->CanFlyAnticheat(movementInfo))
 +            {
 +                if (movementInfo.pos.GetPositionZ() > plMover->GetPositionZ() && fabs(movementInfo.pos.GetPositionZ() - plMover->GetPositionZ()) > 1.5f)
 +                {
@@ -196,30 +417,42 @@ diff -r 9bbeba59a2ec src/server/game/Server/Protocol/Handlers/MovementHandler.cp
 +                }
 +            }
 +
-+            // this is the distance doable by a player in 1000 ms.
-+            float fSpeedRate = plMover->GetSpeedRate(UnitMoveType(uiMoveType));
-+
-+            // in my opinion this var must be constant in each check to avoid false reports
-+            if (plMover->GetLastSpeedRate() == fSpeedRate)
++            if (plMover->GetLastPacketTime() > 0 && 
++                movementInfo.GetMovementFlags() == plMover->GetUnitMovementFlags() &&
++                opcode == MSG_MOVE_HEARTBEAT && 
++                !plMover->GetVehicle() && 
++                plMover->GetMotionMaster()->GetCurrentMovementGeneratorType() != TARGETED_MOTION_TYPE)
 +            {
-+                // Calculate Distance2D
-+                float fDeltaX = pow((movementInfo.pos.GetPositionX() - plMover->GetPositionX()),2);
-+                float fDeltaY = pow(movementInfo.pos.GetPositionY() - plMover->GetPositionY(),2);
-+                // final distance
-+                float fDistance2d = fabs(sqrt(fDeltaX + fDeltaY) - plMover->GetObjectSize() - plMover->GetObjectSize());
++                uint8 uiMoveType = 0;
 +
-+                // time between packets
-+                uint32 uiDiffTime = getMSTimeDiff(plMover->GetLastPacketTime(),getMSTime());
-+        
-+                // this is the distance doable by the player in 1 sec using the time between the packets
-+                float fCoreDistance = uiDiffTime * 7.0f * fSpeedRate / 1000;
++                if (plMover->IsFlying())
++                    uiMoveType = MOVE_FLIGHT;
++                else if (plMover->IsUnderWater())
++                    uiMoveType = MOVE_SWIM;
++                else 
++                    uiMoveType = MOVE_RUN;
 +
-+                /* SPEED HACK DETECTION */
-+                // some times (i dont know why) fCoreDistance is 0 
-+                if (fCoreDistance > 0.0f && fDistance2d > 0)
++                // this is the distance doable by a player in 1000 ms.
++                float fSpeedRate = plMover->GetSpeedRate(UnitMoveType(uiMoveType));
++
++                // in my opinion this var must be constant in each check to avoid false reports
++                if (plMover->GetLastSpeedRate() == fSpeedRate)
 +                {
-+                    // movements packet are sent every 500 ms aprox, if the uiDiffTime is less than 500 (aprox), imo it is a lag problem
-+                    if (uiDiffTime < sWorld.getIntConfig(CONFIG_ANTICHEAT_MAX_DIFF_TIME) && uiDiffTime > sWorld.getIntConfig(CONFIG_ANTICHEAT_MIN_DIFF_TIME))
++                    // Calculate Distance2D
++                    float fDeltaX = pow((movementInfo.pos.GetPositionX() - plMover->GetPositionX()),2);
++                    float fDeltaY = pow(movementInfo.pos.GetPositionY() - plMover->GetPositionY(),2);
++                    // final distance
++                    float fDistance2d = fabs(sqrt(fDeltaX + fDeltaY) - plMover->GetObjectSize() - plMover->GetObjectSize());
++
++                    // time between packets
++                    uint32 uiDiffTime =  getMSTimeDiff(plMover->GetLastPacketTime(), movementInfo.time);
++                    
++                    // this is the distance doable by the player in 1 sec using the time between the packets
++                    float fCoreDistance = uiDiffTime * 7.0f * fSpeedRate / 1000;
++
++                    /* SPEED HACK DETECTION */
++                    // some times (i dont know why) fCoreDistance is 0 
++                    if (fCoreDistance > 0.0f && fDistance2d > 0)
 +                    {
 +                        if (fDistance2d > fCoreDistance)
 +                        {
@@ -238,44 +471,45 @@ diff -r 9bbeba59a2ec src/server/game/Server/Protocol/Handlers/MovementHandler.cp
 +
 +            if (plMover->IsFlying())
 +                uiMoveType = MOVE_FLIGHT;
-+            else
++            else if (plMover->IsUnderWater())
++                uiMoveType = MOVE_SWIM;
++            else 
 +                uiMoveType = MOVE_RUN;
 +
-+            plMover->SetLastPacketTime(getMSTime());
++            plMover->SetLastPacketTime(movementInfo.time);
 +            plMover->SetLastSpeedRate(plMover->GetSpeedRate(UnitMoveType(uiMoveType)));
 +        }
 +    }
  
      /* process position-change */
      WorldPacket data(opcode, recv_data.size());
-diff -r 9bbeba59a2ec src/server/game/World/World.cpp
---- a/src/server/game/World/World.cpp   Sun Oct 31 22:37:54 2010 +0100
-+++ b/src/server/game/World/World.cpp   Sun Oct 31 19:38:02 2010 -0300
-@@ -1214,6 +1214,11 @@
+diff -r a168ad157489 src/server/game/World/World.cpp
+--- a/src/server/game/World/World.cpp	Fri Nov 05 00:54:17 2010 +0200
++++ b/src/server/game/World/World.cpp	Thu Nov 04 22:44:44 2010 -0300
+@@ -1214,6 +1214,9 @@
      // MySQL ping time interval
      m_int_configs[CONFIG_DB_PING_INTERVAL] = sConfig.GetIntDefault("MaxPingTime", 1800);
  
 +    // anticheat configs
 +    m_bool_configs[CONFIG_ANTICHEAT_ENABLE] = sConfig.GetBoolDefault("Anticheat.Enable", false);
-+    m_int_configs[CONFIG_ANTICHEAT_MAX_DIFF_TIME] = sConfig.GetIntDefault("Anticheat.MaxDiffTime", 1000);
-+    m_int_configs[CONFIG_ANTICHEAT_MIN_DIFF_TIME] = sConfig.GetIntDefault("Anticheat.MinDiffTime", 350);
 +
      sScriptMgr.OnConfigLoad(reload);
  }
  
-@@ -2690,6 +2695,9 @@
+@@ -2690,6 +2693,10 @@
          if (itr->second->GetPlayer())
              itr->second->GetPlayer()->ResetDailyQuestStatus();
  
 +    //ANTICHEAT
 +    CharacterDatabase.Execute("DELETE FROM cheat_reports;");
++    CharacterDatabase.Execute("DELETE FROM cheat_first_report;");
 +
      // change available dailies
      sPoolMgr.ChangeDailyQuests();
  }
-diff -r 9bbeba59a2ec src/server/game/World/World.h
---- a/src/server/game/World/World.h     Sun Oct 31 22:37:54 2010 +0100
-+++ b/src/server/game/World/World.h     Sun Oct 31 19:38:02 2010 -0300
+diff -r a168ad157489 src/server/game/World/World.h
+--- a/src/server/game/World/World.h	Fri Nov 05 00:54:17 2010 +0200
++++ b/src/server/game/World/World.h	Thu Nov 04 22:44:44 2010 -0300
 @@ -161,6 +161,7 @@
      CONFIG_CHATLOG_BGROUND,
      CONFIG_DUNGEON_FINDER_ENABLE,
@@ -284,43 +518,64 @@ diff -r 9bbeba59a2ec src/server/game/World/World.h
      BOOL_CONFIG_VALUE_COUNT
  };
  
-@@ -306,6 +307,8 @@
-     CONFIG_AUTOBROADCAST_INTERVAL,
-     CONFIG_MAX_RESULTS_LOOKUP_COMMANDS,
-     CONFIG_DB_PING_INTERVAL,
-+    CONFIG_ANTICHEAT_MAX_DIFF_TIME,
-+    CONFIG_ANTICHEAT_MIN_DIFF_TIME,
-     INT_CONFIG_VALUE_COUNT
- };
- 
-diff -r 9bbeba59a2ec src/server/shared/Database/Implementation/CharacterDatabase.cpp
---- a/src/server/shared/Database/Implementation/CharacterDatabase.cpp   Sun Oct 31 22:37:54 2010 +0100
-+++ b/src/server/shared/Database/Implementation/CharacterDatabase.cpp   Sun Oct 31 19:38:02 2010 -0300
-@@ -211,5 +211,8 @@
+diff -r a168ad157489 src/server/shared/Database/Implementation/CharacterDatabase.cpp
+--- a/src/server/shared/Database/Implementation/CharacterDatabase.cpp	Fri Nov 05 00:54:17 2010 +0200
++++ b/src/server/shared/Database/Implementation/CharacterDatabase.cpp	Thu Nov 04 22:44:44 2010 -0300
+@@ -211,5 +211,22 @@
      PrepareStatement(CHAR_CLEAN_GUILD_BANK_TABS, "DELETE FROM guild_bank_tab WHERE guildId NOT IN (SELECT guildid FROM guild)");
      PrepareStatement(CHAR_CLEAN_GUILD_BANK_RIGHTS, "DELETE FROM guild_bank_right WHERE guildId NOT IN (SELECT guildid FROM guild)");
      PrepareStatement(CHAR_CLEAN_GUILD_BANK_ITEMS, "DELETE FROM guild_bank_item WHERE guildId NOT IN (SELECT guildid FROM guild)");
 +
-+    PrepareStatement(CHAR_ANTICHEAT_SET_CHEATERS, "INSERT INTO cheat_reports (`guid`,`name`,`mapid`,`position_x`,`position_y`,`position_z`,`report`) VALUES (?,?,?,?,?,?,?);");
++    PrepareStatement(CHAR_ANTICHEAT_SET_CHEATERS, "INSERT INTO cheat_reports (`guid`,`name`,`mapid`,`position_x`,`position_y`,`position_z`,`report`,`time`) VALUES (?,?,?,?,?,?,?,?);");
++    PrepareStatement(CHAR_ANTICHEAT_SET_CHEATERS_TEMP, "INSERT INTO cheat_temp_reports (`guid`,`name`,`mapid`,`position_x`,`position_y`,`position_z`,`report`,`time`) VALUES (?,?,?,?,?,?,?,?);");
 +    PrepareStatement(CHAR_ANTICHEAT_GET_CHEATERS, "SELECT A.`name` , count( * ) AS 'Repeticiones' FROM `characters` AS A, `cheat_reports` AS B WHERE A.`online` =1 AND A.`guid` = B.`guid` GROUP BY B.`guid` ORDER BY Repeticiones DESC LIMIT 0 , 3");
++    PrepareStatement(CHAR_ANTICHEAT_SET_CHEAT_FIRST_REPORT, "INSERT INTO cheat_first_report (`guid`,`name`,`time`) VALUES (?,?,?);");
++    PrepareStatement(CHAR_ANTICHEAT_GET_CHEATERS_AVERAGE, "SELECT A.`name` , CAST((SUM(B.time ) / count( * ) ) - C.time AS UNSIGNED) AS 'promedio' , CAST(count( * ) AS UNSIGNED) AS 'Repeticiones' FROM `characters` AS A, `cheat_temp_reports` AS B, cheat_first_report AS C WHERE A.`online` =1 AND A.`guid` = B.`guid` AND A.guid = C.guid GROUP BY B.`guid` ORDER BY Repeticiones  DESC LIMIT 0 , 3;");
++    PrepareStatement(CHAR_ANTICHEAT_GET_CHEAT_FIRST_REPORT, "SELECT * FROM cheat_first_report WHERE guid=?;");
++    PrepareStatement(CHAR_ANTICHEAT_DEL_CHEAT_FIRST_REPORT, "DELETE FROM cheat_first_report WHERE guid=?");
++    PrepareStatement(CHAR_ANTICHEAT_DEL_CHEATERS_TEMP, "DELETE FROM cheat_temp_reports WHERE guid=?");
++    PrepareStatement(CHAR_ANTICHEAT_DEL_CHEATERS, "DELETE FROM cheat_reports WHERE guid=?");
++    PrepareStatement(CHAR_ANTICHEAT_CLEAN_CHEAT_FIRST_REPORT, "DELETE FROM cheat_first_report;");
++    PrepareStatement(CHAR_ANTICHEAT_CLEAN_CHEATERS_TEMP, "DELETE FROM cheat_temp_reports");
++    PrepareStatement(CHAR_ANTICHEAT_CLEAN_CHEATERS, "DELETE FROM cheat_reports;");
++
++    PrepareStatement(CHAR_ANTICHEAT_GET_CHEATERS_AVERAGE_BY_GUID,"SELECT CAST((SUM(B.time ) / count( * ) ) - C.time AS UNSIGNED) AS 'promedio' , CAST(count( * ) AS UNSIGNED) AS 'Repeticiones' FROM `characters` AS A, `cheat_temp_reports` AS B, cheat_first_report AS C WHERE A.`online` =1 AND A.`guid` = B.`guid` AND A.guid = C.guid AND A.`guid`=? GROUP BY B.`guid` ORDER BY Repeticiones  DESC LIMIT 0 , 1;");
++    PrepareStatement(CHAR_ANTICHEAT_GET_CHEATERS_BY_GUID,"SELECT count( * ) AS 'Repeticiones' FROM `characters` AS A, `cheat_reports` AS B WHERE A.`online` =1 AND A.`guid` = B.`guid` AND A.`guid`=? GROUP BY B.`guid` ORDER BY Repeticiones DESC LIMIT 0 , 1");
++
      return true;
  }
-diff -r 9bbeba59a2ec src/server/shared/Database/Implementation/CharacterDatabase.h
---- a/src/server/shared/Database/Implementation/CharacterDatabase.h     Sun Oct 31 22:37:54 2010 +0100
-+++ b/src/server/shared/Database/Implementation/CharacterDatabase.h     Sun Oct 31 19:38:02 2010 -0300
-@@ -176,6 +176,8 @@
-     CHAR_CLEAN_GUILD_BANK_TABS,
+diff -r a168ad157489 src/server/shared/Database/Implementation/CharacterDatabase.h
+--- a/src/server/shared/Database/Implementation/CharacterDatabase.h	Fri Nov 05 00:54:17 2010 +0200
++++ b/src/server/shared/Database/Implementation/CharacterDatabase.h	Thu Nov 04 22:44:44 2010 -0300
+@@ -177,6 +177,24 @@
      CHAR_CLEAN_GUILD_BANK_RIGHTS,
      CHAR_CLEAN_GUILD_BANK_ITEMS,
+ 
 +    CHAR_ANTICHEAT_SET_CHEATERS,
 +    CHAR_ANTICHEAT_GET_CHEATERS,
- 
++
++    CHAR_ANTICHEAT_SET_CHEAT_FIRST_REPORT,
++    CHAR_ANTICHEAT_GET_CHEAT_FIRST_REPORT,
++    CHAR_ANTICHEAT_GET_CHEATERS_AVERAGE,
++    CHAR_ANTICHEAT_DEL_CHEAT_FIRST_REPORT,
++    CHAR_ANTICHEAT_SET_CHEATERS_TEMP,
++    CHAR_ANTICHEAT_DEL_CHEATERS_TEMP,
++    CHAR_ANTICHEAT_DEL_CHEATERS,
++
++    CHAR_ANTICHEAT_CLEAN_CHEAT_FIRST_REPORT,
++    CHAR_ANTICHEAT_CLEAN_CHEATERS_TEMP,
++    CHAR_ANTICHEAT_CLEAN_CHEATERS,
++
++    CHAR_ANTICHEAT_GET_CHEATERS_AVERAGE_BY_GUID,
++    CHAR_ANTICHEAT_GET_CHEATERS_BY_GUID,
++
      MAX_CHARACTERDATABASE_STATEMENTS,
  };
-diff -r 9bbeba59a2ec src/server/worldserver/worldserver.conf.dist
---- a/src/server/worldserver/worldserver.conf.dist      Sun Oct 31 22:37:54 2010 +0100
-+++ b/src/server/worldserver/worldserver.conf.dist      Sun Oct 31 19:38:02 2010 -0300
-@@ -2062,6 +2062,14 @@
+ 
+diff -r a168ad157489 src/server/worldserver/worldserver.conf.dist
+--- a/src/server/worldserver/worldserver.conf.dist	Fri Nov 05 00:54:17 2010 +0200
++++ b/src/server/worldserver/worldserver.conf.dist	Thu Nov 04 22:44:44 2010 -0300
+@@ -2062,6 +2062,10 @@
  #        Default: 0 - off
  #                 1 - on
  #
@@ -328,17 +583,12 @@ diff -r 9bbeba59a2ec src/server/worldserver/worldserver.conf.dist
 +#        Enable Anticheat System
 +#        Default: 0 - off
 +#                 1 - on
-+#   Anticheat.MaxDiffTime
-+#        Default: 1000 ms
-+#   Anticheat.MinDiffTime
-+#        Default: 350 ms
  ###############################################################################
  
  PlayerStart.AllReputation = 0
-@@ -2085,3 +2093,6 @@
+@@ -2085,3 +2089,4 @@
  LevelReq.Auction = 1
  LevelReq.Mail = 1
  DungeonFinder.Enable = 0
 +Anticheat.Enable = 0
-+Anticheat.MaxDiffTime = 1000
-+Anticheat.MinDiffTime = 350
+
