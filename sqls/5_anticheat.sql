@@ -23,7 +23,7 @@ CREATE TABLE `cheat_reports` (
   KEY `guid` (`guid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci AUTO_INCREMENT=1 ;
 
-DROP TABLE IF EXISTS `cheat_temp_report`;
+DROP TABLE IF EXISTS `cheat_temp_reports`;
 CREATE TABLE `cheat_temp_reports` (
   `id` int(11) unsigned NOT NULL auto_increment,
   `guid` int(11) unsigned NOT NULL,
