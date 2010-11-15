@@ -1,6 +1,6 @@
-diff -r 201e4d8a8c89 src/server/game/Chat/Chat.cpp
---- a/src/server/game/Chat/Chat.cpp	Mon Nov 15 02:45:48 2010 +0200
-+++ b/src/server/game/Chat/Chat.cpp	Sun Nov 14 22:21:23 2010 -0300
+diff -r 2674e9ed053c src/server/game/Chat/Chat.cpp
+--- a/src/server/game/Chat/Chat.cpp	Mon Nov 15 23:20:20 2010 +0100
++++ b/src/server/game/Chat/Chat.cpp	Mon Nov 15 19:41:09 2010 -0300
 @@ -512,6 +512,15 @@
          { NULL,             0,                  false, NULL,                                                "", NULL }
      };
@@ -25,9 +25,9 @@ diff -r 201e4d8a8c89 src/server/game/Chat/Chat.cpp
          { NULL,             0,                  false, NULL,                                           "", NULL }
      };
  
-diff -r 201e4d8a8c89 src/server/game/Chat/Chat.h
---- a/src/server/game/Chat/Chat.h	Mon Nov 15 02:45:48 2010 +0200
-+++ b/src/server/game/Chat/Chat.h	Sun Nov 14 22:21:23 2010 -0300
+diff -r 2674e9ed053c src/server/game/Chat/Chat.h
+--- a/src/server/game/Chat/Chat.h	Mon Nov 15 23:20:20 2010 +0100
++++ b/src/server/game/Chat/Chat.h	Mon Nov 15 19:41:09 2010 -0300
 @@ -473,6 +473,12 @@
  
          bool HandleTempGameObjectCommand(const char* args);
@@ -41,9 +41,9 @@ diff -r 201e4d8a8c89 src/server/game/Chat/Chat.h
          //! Development Commands
  
          /*bool HandleQuestAdd(const char * args);
-diff -r 201e4d8a8c89 src/server/game/Chat/Commands/Level3.cpp
---- a/src/server/game/Chat/Commands/Level3.cpp	Mon Nov 15 02:45:48 2010 +0200
-+++ b/src/server/game/Chat/Commands/Level3.cpp	Sun Nov 14 22:21:23 2010 -0300
+diff -r 2674e9ed053c src/server/game/Chat/Commands/Level3.cpp
+--- a/src/server/game/Chat/Commands/Level3.cpp	Mon Nov 15 23:20:20 2010 +0100
++++ b/src/server/game/Chat/Commands/Level3.cpp	Mon Nov 15 19:41:09 2010 -0300
 @@ -5837,6 +5837,180 @@
      return true;
  }
@@ -225,9 +225,9 @@ diff -r 201e4d8a8c89 src/server/game/Chat/Commands/Level3.cpp
  bool ChatHandler::HandleFreezeCommand(const char *args)
  {
      std::string name;
-diff -r 201e4d8a8c89 src/server/game/Entities/Player/Player.cpp
---- a/src/server/game/Entities/Player/Player.cpp	Mon Nov 15 02:45:48 2010 +0200
-+++ b/src/server/game/Entities/Player/Player.cpp	Sun Nov 14 22:21:23 2010 -0300
+diff -r 2674e9ed053c src/server/game/Entities/Player/Player.cpp
+--- a/src/server/game/Entities/Player/Player.cpp	Mon Nov 15 23:20:20 2010 +0100
++++ b/src/server/game/Entities/Player/Player.cpp	Mon Nov 15 19:41:09 2010 -0300
 @@ -617,6 +617,10 @@
  
  Player::~Player ()
@@ -357,9 +357,9 @@ diff -r 201e4d8a8c89 src/server/game/Entities/Player/Player.cpp
  void Player::UpdatePvPState(bool onlyFFA)
  {
      // TODO: should we always synchronize UNIT_FIELD_BYTES_2, 1 of controller and controlled?
-diff -r 201e4d8a8c89 src/server/game/Entities/Player/Player.h
---- a/src/server/game/Entities/Player/Player.h	Mon Nov 15 02:45:48 2010 +0200
-+++ b/src/server/game/Entities/Player/Player.h	Sun Nov 14 22:21:23 2010 -0300
+diff -r 2674e9ed053c src/server/game/Entities/Player/Player.h
+--- a/src/server/game/Entities/Player/Player.h	Mon Nov 15 23:20:20 2010 +0100
++++ b/src/server/game/Entities/Player/Player.h	Mon Nov 15 19:41:09 2010 -0300
 @@ -2380,6 +2380,19 @@
          float GetAverageItemLevel();
          bool isDebugAreaTriggers;
@@ -394,10 +394,10 @@ diff -r 201e4d8a8c89 src/server/game/Entities/Player/Player.h
          // internal common parts for CanStore/StoreItem functions
          uint8 _CanStoreItem_InSpecificSlot(uint8 bag, uint8 slot, ItemPosCountVec& dest, ItemPrototype const *pProto, uint32& count, bool swap, Item *pSrcItem) const;
          uint8 _CanStoreItem_InBag(uint8 bag, ItemPosCountVec& dest, ItemPrototype const *pProto, uint32& count, bool merge, bool non_specialized, Item *pSrcItem, uint8 skip_bag, uint8 skip_slot) const;
-diff -r 201e4d8a8c89 src/server/game/Server/Protocol/Handlers/MovementHandler.cpp
---- a/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp	Mon Nov 15 02:45:48 2010 +0200
-+++ b/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp	Sun Nov 14 22:21:23 2010 -0300
-@@ -340,6 +340,131 @@
+diff -r 2674e9ed053c src/server/game/Server/Protocol/Handlers/MovementHandler.cpp
+--- a/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp	Mon Nov 15 23:20:20 2010 +0100
++++ b/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp	Mon Nov 15 19:41:09 2010 -0300
+@@ -340,6 +340,135 @@
      }
  
      /*----------------------*/
@@ -486,24 +486,28 @@ diff -r 201e4d8a8c89 src/server/game/Server/Protocol/Handlers/MovementHandler.cp
 +            }
 +
 +            // just to prevent false reports when we switch (off/on) for example the aura or something.
-+            if (movementInfo.GetMovementFlags() == plMover->GetUnitMovementFlags())
++            if (movementInfo.GetMovementFlags() == plMover->GetUnitMovementFlags() && 
++                plMover->isAlive() &&
++                !plMover->isInFlight() &&
++                !plMover->GetVehicle())
 +            {
 +                // walk on water hack detection
 +                // AFAIK the player can only do this if has some aura that allows it... 
 +                if (!plMover->HasAuraType(SPELL_AURA_WATER_WALK) &&
-+                    plMover->HasUnitMovementFlag(MOVEMENTFLAG_WATERWALKING))
++                    plMover->HasUnitMovementFlag(MOVEMENTFLAG_WATERWALKING) && 
++                    !plMover->IsFlying())
 +                {
-+                    sLog.outError("Cheater! guid %u name %s Latency %u",plMover->GetGUIDLow(),plMover->GetName(), plMover->GetSession()->GetLatency());
++                    sLog.outError("Cheater! WaterWalking guid %u name %s Latency %u",plMover->GetGUIDLow(),plMover->GetName(), plMover->GetSession()->GetLatency());
 +                    plMover->ElaborateCheatReport(plMover,3);
 +                }
 +
-+                // walk on water hack detection
++                // fly hack detection
 +                // AFAIK the player can only do this if has some aura that allows it... 
-+                if (plMover->IsFlying() && 
-+                    !plMover->HasAuraType(SPELL_AURA_FLY) 
-+                    && !plMover->GetVehicle())
++                if (plMover->IsFlying() &&
++                    !plMover->HasAuraType(SPELL_AURA_FLY) &&
++                    !plMover->HasAuraType(SPELL_AURA_MOD_INCREASE_MOUNTED_FLIGHT_SPEED))
 +                {
-+                    sLog.outError("Cheater! guid %u name %s Latency %u",plMover->GetGUIDLow(),plMover->GetName(), plMover->GetSession()->GetLatency());
++                    sLog.outError("Cheater! Fly guid %u name %s Latency %u",plMover->GetGUIDLow(),plMover->GetName(), plMover->GetSession()->GetLatency());
 +                    plMover->ElaborateCheatReport(plMover,2);
 +                }
 +            }
@@ -529,9 +533,9 @@ diff -r 201e4d8a8c89 src/server/game/Server/Protocol/Handlers/MovementHandler.cp
  
      /* process position-change */
      WorldPacket data(opcode, recv_data.size());
-diff -r 201e4d8a8c89 src/server/game/World/World.cpp
---- a/src/server/game/World/World.cpp	Mon Nov 15 02:45:48 2010 +0200
-+++ b/src/server/game/World/World.cpp	Sun Nov 14 22:21:23 2010 -0300
+diff -r 2674e9ed053c src/server/game/World/World.cpp
+--- a/src/server/game/World/World.cpp	Mon Nov 15 23:20:20 2010 +0100
++++ b/src/server/game/World/World.cpp	Mon Nov 15 19:41:09 2010 -0300
 @@ -1181,6 +1181,12 @@
      // MySQL ping time interval
      m_int_configs[CONFIG_DB_PING_INTERVAL] = sConfig.GetIntDefault("MaxPingTime", 1800);
@@ -556,9 +560,9 @@ diff -r 201e4d8a8c89 src/server/game/World/World.cpp
      // change available dailies
      sPoolMgr.ChangeDailyQuests();
  }
-diff -r 201e4d8a8c89 src/server/game/World/World.h
---- a/src/server/game/World/World.h	Mon Nov 15 02:45:48 2010 +0200
-+++ b/src/server/game/World/World.h	Sun Nov 14 22:21:23 2010 -0300
+diff -r 2674e9ed053c src/server/game/World/World.h
+--- a/src/server/game/World/World.h	Mon Nov 15 23:20:20 2010 +0100
++++ b/src/server/game/World/World.h	Mon Nov 15 19:41:09 2010 -0300
 @@ -162,6 +162,7 @@
      CONFIG_DUNGEON_FINDER_ENABLE,
      CONFIG_AUTOBROADCAST,
@@ -584,9 +588,9 @@ diff -r 201e4d8a8c89 src/server/game/World/World.h
      INT_CONFIG_VALUE_COUNT
  };
  
-diff -r 201e4d8a8c89 src/server/shared/Database/Implementation/CharacterDatabase.cpp
---- a/src/server/shared/Database/Implementation/CharacterDatabase.cpp	Mon Nov 15 02:45:48 2010 +0200
-+++ b/src/server/shared/Database/Implementation/CharacterDatabase.cpp	Sun Nov 14 22:21:23 2010 -0300
+diff -r 2674e9ed053c src/server/shared/Database/Implementation/CharacterDatabase.cpp
+--- a/src/server/shared/Database/Implementation/CharacterDatabase.cpp	Mon Nov 15 23:20:20 2010 +0100
++++ b/src/server/shared/Database/Implementation/CharacterDatabase.cpp	Mon Nov 15 19:41:09 2010 -0300
 @@ -211,5 +211,22 @@
      PrepareStatement(CHAR_CLEAN_GUILD_BANK_TABS, "DELETE FROM guild_bank_tab WHERE guildId NOT IN (SELECT guildid FROM guild)");
      PrepareStatement(CHAR_CLEAN_GUILD_BANK_RIGHTS, "DELETE FROM guild_bank_right WHERE guildId NOT IN (SELECT guildid FROM guild)");
@@ -610,9 +614,9 @@ diff -r 201e4d8a8c89 src/server/shared/Database/Implementation/CharacterDatabase
 +
      return true;
  }
-diff -r 201e4d8a8c89 src/server/shared/Database/Implementation/CharacterDatabase.h
---- a/src/server/shared/Database/Implementation/CharacterDatabase.h	Mon Nov 15 02:45:48 2010 +0200
-+++ b/src/server/shared/Database/Implementation/CharacterDatabase.h	Sun Nov 14 22:21:23 2010 -0300
+diff -r 2674e9ed053c src/server/shared/Database/Implementation/CharacterDatabase.h
+--- a/src/server/shared/Database/Implementation/CharacterDatabase.h	Mon Nov 15 23:20:20 2010 +0100
++++ b/src/server/shared/Database/Implementation/CharacterDatabase.h	Mon Nov 15 19:41:09 2010 -0300
 @@ -177,6 +177,24 @@
      CHAR_CLEAN_GUILD_BANK_RIGHTS,
      CHAR_CLEAN_GUILD_BANK_ITEMS,
@@ -638,9 +642,9 @@ diff -r 201e4d8a8c89 src/server/shared/Database/Implementation/CharacterDatabase
      MAX_CHARACTERDATABASE_STATEMENTS,
  };
  
-diff -r 201e4d8a8c89 src/server/worldserver/worldserver.conf.dist
---- a/src/server/worldserver/worldserver.conf.dist	Mon Nov 15 02:45:48 2010 +0200
-+++ b/src/server/worldserver/worldserver.conf.dist	Sun Nov 14 22:21:23 2010 -0300
+diff -r 2674e9ed053c src/server/worldserver/worldserver.conf.dist
+--- a/src/server/worldserver/worldserver.conf.dist	Mon Nov 15 23:20:20 2010 +0100
++++ b/src/server/worldserver/worldserver.conf.dist	Mon Nov 15 19:41:09 2010 -0300
 @@ -2043,6 +2043,16 @@
  #        Default: 0 - off
  #                 1 - on
