@@ -1,6 +1,6 @@
-diff -r 62b7591c2cae src/server/game/Chat/Chat.h
---- a/src/server/game/Chat/Chat.h	Mon Nov 22 18:36:08 2010 +0100
-+++ b/src/server/game/Chat/Chat.h	Mon Nov 22 23:05:47 2010 -0300
+diff -r 943b17263ef6 src/server/game/Chat/Chat.h
+--- a/src/server/game/Chat/Chat.h	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/game/Chat/Chat.h	Sat Nov 27 15:52:16 2010 -0300
 @@ -340,6 +340,12 @@
  
          bool HandleTempGameObjectCommand(const char* args);
@@ -14,15 +14,15 @@ diff -r 62b7591c2cae src/server/game/Chat/Chat.h
          //! Development Commands
  
          /*bool HandleQuestAdd(const char * args);
-diff -r 62b7591c2cae src/server/game/Chat/Commands/Level0.cpp
---- a/src/server/game/Chat/Commands/Level0.cpp	Mon Nov 22 18:36:08 2010 +0100
-+++ b/src/server/game/Chat/Commands/Level0.cpp	Mon Nov 22 23:05:47 2010 -0300
+diff -r 943b17263ef6 src/server/game/Chat/Commands/Level0.cpp
+--- a/src/server/game/Chat/Commands/Level0.cpp	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/game/Chat/Commands/Level0.cpp	Sat Nov 27 15:52:16 2010 -0300
 @@ -56,6 +56,14 @@
  {
      Player *chr = m_session->GetPlayer();
  
 +    // anticheat code
-+    if (chr->GetAreaId() == 876 && !chr->isGameMaster())
++    if (chr->GetAreaId() == 876 && !chr->isGameMaster() && chr->GetPositionZ() < 15.0f)
 +    {
 +        SendSysMessage("You can't do that, you are jailed!");
 +        SetSentErrorMessage(true);
@@ -32,9 +32,9 @@ diff -r 62b7591c2cae src/server/game/Chat/Commands/Level0.cpp
      if (chr->isInFlight())
      {
          SendSysMessage(LANG_YOU_IN_FLIGHT);
-diff -r 62b7591c2cae src/server/game/Entities/Player/Player.cpp
---- a/src/server/game/Entities/Player/Player.cpp	Mon Nov 22 18:36:08 2010 +0100
-+++ b/src/server/game/Entities/Player/Player.cpp	Mon Nov 22 23:05:47 2010 -0300
+diff -r 943b17263ef6 src/server/game/Entities/Player/Player.cpp
+--- a/src/server/game/Entities/Player/Player.cpp	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/game/Entities/Player/Player.cpp	Sat Nov 27 15:52:16 2010 -0300
 @@ -617,6 +617,10 @@
  
  Player::~Player ()
@@ -46,7 +46,7 @@ diff -r 62b7591c2cae src/server/game/Entities/Player/Player.cpp
      // it must be unloaded already in PlayerLogout and accessed only for loggined player
      //m_social = NULL;
  
-@@ -652,6 +656,247 @@
+@@ -652,6 +656,350 @@
      sWorld.DecreasePlayerCount();
  }
  
@@ -131,32 +131,97 @@ diff -r 62b7591c2cae src/server/game/Entities/Player/Player.cpp
 +    }
 +}
 +
-+void Player::SpeedHackDetection(MovementInfo& pOldPacket, MovementInfo& pNewPacket, uint32 uiOpcode, float fLastSpeedRate)
++void Player::JumpHackDetection(uint32 uiOpcode)
++{
++    // if we receive 2 jump packets consecutively... it is wrong! The player is cheating.
++
++    if (uiOpcode != MSG_MOVE_JUMP || GetLastOpcode() != MSG_MOVE_JUMP)
++        return;
++
++    ElaborateCheatReport(this,5);
++}
++
++/*
++void Player::TeleportHackDetection(MovementInfo& pOldPacket, MovementInfo& pNewPacket, uint32 uiOpcode)
++{
++
++    sLog.outError("Opcode que viene %u, Opcode anterior %u", uiOpcode, GetLastOpcode());
++
++    if (uiOpcode == 183 && GetLastOpcode() == 181)
++    {
++
++        sLog.outError("Opcode %u", uiOpcode);
++
++        sLog.outError("OldPacket MovementFlags %u", pOldPacket.GetMovementFlags());
++        sLog.outError("NewPacket MovementFlags %u", pNewPacket.GetMovementFlags());
++
++        sLog.outError("OldPacket falltime %u", pOldPacket.fallTime);
++        sLog.outError("NewPacket falltime %u", pNewPacket.fallTime);
++
++        sLog.outError("CanFly %b",CanFlyAnticheat(pNewPacket));
++        sLog.outError("IsFlying %b",IsFlying());
++
++        sLog.outError("Old Z: %f New Z: %f",pOldPacket.pos.GetPositionZ(), pNewPacket.pos.GetPositionZ());
++        uint8 uiMoveType = 0;
++
++        if (IsFlying())
++            uiMoveType = MOVE_FLIGHT;
++        else if (IsUnderWater())
++            uiMoveType = MOVE_SWIM;
++        else 
++            uiMoveType = MOVE_RUN;
++
++        // core-side speed-rate: Speed / 7
++        float fSpeedRate = GetSpeedRate(UnitMoveType(uiMoveType));
++        // Calculate Distance2D
++        float fDistance2d = pNewPacket.pos.GetExactDist2dSq(GetPositionX(),GetPositionY());
++
++        // time between packets
++        uint32 uiDiffTime =  getMSTimeDiff(pOldPacket.time, pNewPacket.time);
++    
++        // fClientRate = it is the player's rate calculated using the distance done by the player
++        float fClientRate = (fDistance2d * 1000 / uiDiffTime) /  GetSpeed(UnitMoveType(uiMoveType));
++
++        // fServerRate = it is the player's rate using the distance per second (core information)
++        float fServerRate = GetSpeed(UnitMoveType(uiMoveType)) * uiDiffTime / 1000 + sWorld.getFloatConfig(CONFIG_ANTICHEAT_MAX_DISTANCE_DIFF_ALLOWED);
++
++        sLog.outError("fSpeedRate: %f fDistance2d: %f uiDiffTime: %u fClientRate: %f fServerRate: %f",fSpeedRate,fDistance2d,uiDiffTime,fClientRate,fServerRate);
++    
++
++        if (fClientRate > fServerRate)
++        {
++            sLog.outError("TELEPORT 0");// teleport hack
++            ElaborateCheatReport(this,4);
++        }
++    }
++}
++*/
++bool Player::SpeedHackDetection(MovementInfo& pOldPacket, MovementInfo& pNewPacket, uint32 uiOpcode, float fLastSpeedRate)
 +{
 +    // strange packet
 +    if (uiOpcode == MSG_MOVE_SET_FACING)
-+        return;
++        return false;
 +
 +    // we like check heartbeat movements
 +    if (pNewPacket.GetMovementFlags() != GetUnitMovementFlags() || 
 +        pNewPacket.GetMovementFlags() != pOldPacket.GetMovementFlags())
-+        return;
++        return false;
 +
 +    // just to prevent false reports
 +    if (GetVehicle())
-+        return;
++        return false;
 +    
 +    // the best way is checking the ip of the target, if it is the same this check should return.
 +    if (GetMotionMaster()->GetCurrentMovementGeneratorType() == TARGETED_MOTION_TYPE)
-+        return;
++        return false;
 +
 +    // it will make false reports
 +    if (IsFalling() && CanFlyAnticheat(pNewPacket))
-+        return;
++        return false;
 +
 +    // the same reason for IsFalling, just in case...
 +    if (HasAuraType(SPELL_AURA_FEATHER_FALL) || HasAuraType(SPELL_AURA_SAFE_FALL))
-+        return;
++        return false;
 +
 +    uint8 uiMoveType = 0;
 +
@@ -172,7 +237,7 @@ diff -r 62b7591c2cae src/server/game/Entities/Player/Player.cpp
 +
 +    // in my opinion this var must be constant in each check to avoid false reports
 +    if (fLastSpeedRate != fSpeedRate)
-+        return;
++        return false;
 +
 +    // Calculate Distance2D
 +    float fDistance2d = pNewPacket.pos.GetExactDist2dSq(GetPositionX(),GetPositionY());
@@ -206,7 +271,11 @@ diff -r 62b7591c2cae src/server/game/Entities/Player/Player.cpp
 +
 +        sLog.outError("CHEATER! SpeedHack guid %u name %s Latency %u",GetGUIDLow(),GetName(), GetSession()->GetLatency());
 +        ElaborateCheatReport(this,1);
++        
++        return true;
 +    }
++
++    return false;
 +}
 +
 +void Player::ElaborateCheatReport(Player* pPlayer, uint8 uiCheatType)
@@ -217,6 +286,8 @@ diff -r 62b7591c2cae src/server/game/Entities/Player/Player.cpp
 +    // cheatType 1 == SpeedHack
 +    // cheatType 2 == FlyHack
 +    // cheatType 3 == WalkOnWaterHack
++    // cheatType 4 == TeleportHack
++    // cheatType 5 == JumpHack
 +
 +    std::string strReportType;
 +
@@ -230,6 +301,12 @@ diff -r 62b7591c2cae src/server/game/Entities/Player/Player.cpp
 +        break;
 +    case 3:
 +        strReportType = "WalkOnWater-Hack";
++        break;
++    case 4:
++        strReportType = "Teleport-Hack";
++        break;
++    case 5:
++        strReportType = "Jump-Hack";
 +        break;
 +    default:
 +        strReportType = "";
@@ -265,6 +342,32 @@ diff -r 62b7591c2cae src/server/game/Entities/Player/Player.cpp
 +        CharacterDatabase.Execute(stmt);
 +    }
 +
++    /*// teleport hack, if the player use this and is detected it will not create enough reports so... we will insert more than 1 report when this is detected.
++    if (uiCheatType == 4)
++    {
++        uint32 uiValor = 100;
++        for (uint8 uiI = 0; uiI < uiValor*2; uiI++)
++        {
++            PreparedStatement* stmt;
++
++            if (uiI < uiValor)
++                stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_SET_CHEATERS);
++            else 
++                stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_SET_CHEATERS_TEMP);
++
++            stmt->setUInt64(0,GetGUIDLow());
++            stmt->setString(1,GetName());
++            stmt->setUInt32(2,GetMapId());
++            stmt->setFloat(3,GetPositionX());
++            stmt->setFloat(4,GetPositionY());
++            stmt->setFloat(5,GetPositionZ());
++            stmt->setString(6,strReportType);
++            stmt->setUInt64(7, uint64(time(NULL)));
++            CharacterDatabase.Execute(stmt);
++        }
++    }*/
++
++
 +    PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_ANTICHEAT_GET_CHEATERS_BY_GUID);
 +    stmt->setUInt32(0,this->GetGUIDLow());
 +    PreparedQueryResult result = CharacterDatabase.Query(stmt);
@@ -294,7 +397,7 @@ diff -r 62b7591c2cae src/server/game/Entities/Player/Player.cpp
  void Player::CleanupsBeforeDelete(bool finalCleanup)
  {
      TradeCancel(false);
-@@ -20005,6 +20250,29 @@
+@@ -20009,6 +20357,29 @@
      }
  }
  
@@ -324,10 +427,10 @@ diff -r 62b7591c2cae src/server/game/Entities/Player/Player.cpp
  void Player::UpdatePvPState(bool onlyFFA)
  {
      // TODO: should we always synchronize UNIT_FIELD_BYTES_2, 1 of controller and controlled?
-diff -r 62b7591c2cae src/server/game/Entities/Player/Player.h
---- a/src/server/game/Entities/Player/Player.h	Mon Nov 22 18:36:08 2010 +0100
-+++ b/src/server/game/Entities/Player/Player.h	Mon Nov 22 23:05:47 2010 -0300
-@@ -2380,6 +2380,22 @@
+diff -r 943b17263ef6 src/server/game/Entities/Player/Player.h
+--- a/src/server/game/Entities/Player/Player.h	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/game/Entities/Player/Player.h	Sat Nov 27 15:52:16 2010 -0300
+@@ -2380,6 +2380,24 @@
          float GetAverageItemLevel();
          bool isDebugAreaTriggers;
  
@@ -341,16 +444,18 @@ diff -r 62b7591c2cae src/server/game/Entities/Player/Player.h
 +        void SetLastSpeedRate(float fSpeedRateRate) { fLastSpeedRate = fSpeedRateRate; }
 +        void SetLastOpcode(uint32 uiOpcode) { uiLastOpcode = uiOpcode; }
 +        void ElaborateCheatReport(Player* pPlayer, uint8 uiReportType);
-+        void SpeedHackDetection(MovementInfo& pOldPacket, MovementInfo& pNewPacket, uint32 uiOpcode, float fLastSpeedRate);
++        bool SpeedHackDetection(MovementInfo& pOldPacket, MovementInfo& pNewPacket, uint32 uiOpcode, float fLastSpeedRate);
++        void TeleportHackDetection(MovementInfo& pOldPacket, MovementInfo& pNewPacket, uint32 uiOpcode);
 +        void FlyHackDetection(MovementInfo& pOldPacket, MovementInfo& pNewPacket);
 +        void WalkOnWaterHackDetection(MovementInfo& pOldPacket, MovementInfo& pNewPacket);
++        void JumpHackDetection(uint32 uiOpcode);
 +        bool CanFlyAnticheat(MovementInfo& pMovementInfo);
 +        bool HasFirstReport();
 +        void CleanTempCheatReports();
      protected:
          uint32 m_AreaID;
          uint32 m_regenTimerCount;
-@@ -2625,6 +2641,13 @@
+@@ -2625,6 +2643,13 @@
  
          bool isAlwaysDetectableFor(WorldObject const* seer) const;      
      private:
@@ -364,10 +469,10 @@ diff -r 62b7591c2cae src/server/game/Entities/Player/Player.h
          // internal common parts for CanStore/StoreItem functions
          uint8 _CanStoreItem_InSpecificSlot(uint8 bag, uint8 slot, ItemPosCountVec& dest, ItemPrototype const *pProto, uint32& count, bool swap, Item *pSrcItem) const;
          uint8 _CanStoreItem_InBag(uint8 bag, ItemPosCountVec& dest, ItemPrototype const *pProto, uint32& count, bool merge, bool non_specialized, Item *pSrcItem, uint8 skip_bag, uint8 skip_slot) const;
-diff -r 62b7591c2cae src/server/game/Server/Protocol/Handlers/MovementHandler.cpp
---- a/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp	Mon Nov 22 18:36:08 2010 +0100
-+++ b/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp	Mon Nov 22 23:05:47 2010 -0300
-@@ -340,6 +340,59 @@
+diff -r 943b17263ef6 src/server/game/Server/Protocol/Handlers/MovementHandler.cpp
+--- a/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/game/Server/Protocol/Handlers/MovementHandler.cpp	Sat Nov 27 15:52:16 2010 -0300
+@@ -340,6 +340,65 @@
      }
  
      /*----------------------*/
@@ -385,9 +490,12 @@ diff -r 62b7591c2cae src/server/game/Server/Protocol/Handlers/MovementHandler.cp
 +        **********************/
 +
 +        // preventing escape from JAIL! MUAHAHHAHA
-+        if (plMover && plMover->GetAreaId() == 876 && !plMover->isGameMaster())
++        if (plMover && plMover->GetAreaId() == 876 && !plMover->isGameMaster() && plMover->GetPositionZ() < 15.0f)
 +        {
-+            if (plMover->GetBaseMap()->GetAreaId(movementInfo.pos.GetPositionX(), movementInfo.pos.GetPositionY(), movementInfo.pos.GetPositionZ()) != 876)
++            if (movementInfo.pos.GetPositionZ() > 10.0f || 
++                movementInfo.pos.GetPositionZ() < -66.0f ||
++                movementInfo.pos.GetExactDist2d(16227.79f, 16403.40f) > 70.0f ||
++                plMover->GetBaseMap()->GetAreaId(movementInfo.pos.GetPositionX(), movementInfo.pos.GetPositionY(), movementInfo.pos.GetPositionZ()) != 876)
 +            {
 +                plMover->TeleportTo(1,16226.5f,16403.6f,-64.5f,3.2f);
 +                return;
@@ -397,7 +505,10 @@ diff -r 62b7591c2cae src/server/game/Server/Protocol/Handlers/MovementHandler.cp
 +        if (plMover && !plMover->isInFlight() && !plMover->GetTransport() && !plMover->IsBeingTeleported() && plMover->CanFreeMove() && !plMover->isGameMaster())
 +        {
 +            // speed hack detection called!
-+            plMover->SpeedHackDetection(plMover->GetLastPacket(), movementInfo,opcode, plMover->GetLastSpeedRate());
++            /*if (!*/plMover->SpeedHackDetection(plMover->GetLastPacket(), movementInfo,opcode, plMover->GetLastSpeedRate());//)
++                //plMover->TeleportHackDetection(plMover->GetLastPacket(), movementInfo,opcode);
++
++            plMover->JumpHackDetection(opcode);
 +
 +            if (plMover->isAlive())
 +                plMover->WalkOnWaterHackDetection(plMover->GetLastPacket(),movementInfo);
@@ -427,9 +538,32 @@ diff -r 62b7591c2cae src/server/game/Server/Protocol/Handlers/MovementHandler.cp
  
      /* process position-change */
      WorldPacket data(opcode, recv_data.size());
-diff -r 62b7591c2cae src/server/game/World/World.cpp
---- a/src/server/game/World/World.cpp	Mon Nov 22 18:36:08 2010 +0100
-+++ b/src/server/game/World/World.cpp	Mon Nov 22 23:05:47 2010 -0300
+diff -r 943b17263ef6 src/server/game/Spells/Spell.cpp
+--- a/src/server/game/Spells/Spell.cpp	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/game/Spells/Spell.cpp	Sat Nov 27 15:52:16 2010 -0300
+@@ -4704,6 +4704,19 @@
+     if (!m_IsTriggeredSpell && !m_caster->isAlive() && !(m_spellInfo->Attributes & SPELL_ATTR_PASSIVE) && !(m_spellInfo->Attributes & SPELL_ATTR_CASTABLE_WHILE_DEAD))
+         return SPELL_FAILED_CASTER_DEAD;
+ 
++    // anticheat code
++    if (m_targets.getUnitTarget() && m_targets.getUnitTarget()->GetTypeId() == TYPEID_PLAYER)
++    {
++        Player* pPlayer = m_targets.getUnitTarget()->ToPlayer();
++
++        if (pPlayer->GetAreaId() == 876 && !pPlayer->isGameMaster() && pPlayer->GetPositionZ() < 15.0f)
++        {
++            for (int i = 0; i < MAX_SPELL_EFFECTS; i++)
++                if (m_spellInfo->Effect[i] == SPELL_EFFECT_TELEPORT_UNITS)
++                        return SPELL_FAILED_NOT_HERE;
++        }
++    }
++
+     // check cooldowns to prevent cheating
+     if (m_caster->GetTypeId() == TYPEID_PLAYER && !(m_spellInfo->Attributes & SPELL_ATTR_PASSIVE))
+     {
+diff -r 943b17263ef6 src/server/game/World/World.cpp
+--- a/src/server/game/World/World.cpp	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/game/World/World.cpp	Sat Nov 27 15:52:16 2010 -0300
 @@ -1181,6 +1181,13 @@
      // MySQL ping time interval
      m_int_configs[CONFIG_DB_PING_INTERVAL] = sConfig.GetIntDefault("MaxPingTime", 1800);
@@ -455,9 +589,9 @@ diff -r 62b7591c2cae src/server/game/World/World.cpp
      // change available dailies
      sPoolMgr.ChangeDailyQuests();
  }
-diff -r 62b7591c2cae src/server/game/World/World.h
---- a/src/server/game/World/World.h	Mon Nov 22 18:36:08 2010 +0100
-+++ b/src/server/game/World/World.h	Mon Nov 22 23:05:47 2010 -0300
+diff -r 943b17263ef6 src/server/game/World/World.h
+--- a/src/server/game/World/World.h	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/game/World/World.h	Sat Nov 27 15:52:16 2010 -0300
 @@ -162,6 +162,7 @@
      CONFIG_DUNGEON_FINDER_ENABLE,
      CONFIG_AUTOBROADCAST,
@@ -484,10 +618,10 @@ diff -r 62b7591c2cae src/server/game/World/World.h
      INT_CONFIG_VALUE_COUNT
  };
  
-diff -r 62b7591c2cae src/server/scripts/Commands/cs_gm.cpp
---- a/src/server/scripts/Commands/cs_gm.cpp	Mon Nov 22 18:36:08 2010 +0100
-+++ b/src/server/scripts/Commands/cs_gm.cpp	Mon Nov 22 23:05:47 2010 -0300
-@@ -256,7 +256,326 @@
+diff -r 943b17263ef6 src/server/scripts/Commands/cs_gm.cpp
+--- a/src/server/scripts/Commands/cs_gm.cpp	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/scripts/Commands/cs_gm.cpp	Sat Nov 27 15:52:16 2010 -0300
+@@ -256,7 +256,330 @@
      }
  };
  
@@ -713,7 +847,7 @@ diff -r 62b7591c2cae src/server/scripts/Commands/cs_gm.cpp
 +        stmt->setUInt32(0,uiGUID);
 +        result = CharacterDatabase.Query(stmt);
 +        
-+        uint32 uiReportsAmount[3] = {0,0,0};
++        uint32 uiReportsAmount[5] = {0,0,0,0,0};
 +
 +        if (result)
 +        {
@@ -728,11 +862,15 @@ diff -r 62b7591c2cae src/server/scripts/Commands/cs_gm.cpp
 +                    uiReportsAmount[1]++;
 +                else if (report.compare("WalkOnWater-Hack") == 0)
 +                    uiReportsAmount[2]++;
++                else if (report.compare("Teleport-Hack") == 0)
++                    uiReportsAmount[3]++;
++                else if (report.compare("Jump-Hack") == 0)
++                    uiReportsAmount[4]++;
 +            }
 +            while (result->NextRow());
 +        }
 +
-+        handler->PSendSysMessage("Speed-Hack reports: %u || Fly-Hack reports: %u ||  WalkOnWater-Hack reports: %u", uiReportsAmount[0],uiReportsAmount[1],uiReportsAmount[2]);
++        handler->PSendSysMessage("Speed-Hack reports: %u || Fly-Hack reports: %u ||  WalkOnWater-Hack reports: %u || Teleport-Hack reports: %u || Jump-Hack reports: %u", uiReportsAmount[0],uiReportsAmount[1],uiReportsAmount[2],uiReportsAmount[3],uiReportsAmount[4]);
 +
 +        return true;
 +    }
@@ -814,9 +952,9 @@ diff -r 62b7591c2cae src/server/scripts/Commands/cs_gm.cpp
      new gm_commandscript();
 +    new anticheat_commandscript();
  }
-diff -r 62b7591c2cae src/server/shared/Database/Implementation/CharacterDatabase.cpp
---- a/src/server/shared/Database/Implementation/CharacterDatabase.cpp	Mon Nov 22 18:36:08 2010 +0100
-+++ b/src/server/shared/Database/Implementation/CharacterDatabase.cpp	Mon Nov 22 23:05:47 2010 -0300
+diff -r 943b17263ef6 src/server/shared/Database/Implementation/CharacterDatabase.cpp
+--- a/src/server/shared/Database/Implementation/CharacterDatabase.cpp	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/shared/Database/Implementation/CharacterDatabase.cpp	Sat Nov 27 15:52:16 2010 -0300
 @@ -215,5 +215,21 @@
      PrepareStatement(CHAR_DEL_CRESPAWNTIME, "DELETE FROM creature_respawn WHERE guid = ? AND instance = ?");
      PrepareStatement(CHAR_ADD_CRESPAWNTIME, "INSERT INTO creature_respawn VALUES (?, ?, ?)");
@@ -839,9 +977,9 @@ diff -r 62b7591c2cae src/server/shared/Database/Implementation/CharacterDatabase
 +    PrepareStatement(CHAR_ANTICHEAT_GET_REPORTS_TYPE_BY_GUID,"SELECT report FROM cheat_reports WHERE guid=?;");
      return true;
  }
-diff -r 62b7591c2cae src/server/shared/Database/Implementation/CharacterDatabase.h
---- a/src/server/shared/Database/Implementation/CharacterDatabase.h	Mon Nov 22 18:36:08 2010 +0100
-+++ b/src/server/shared/Database/Implementation/CharacterDatabase.h	Mon Nov 22 23:05:47 2010 -0300
+diff -r 943b17263ef6 src/server/shared/Database/Implementation/CharacterDatabase.h
+--- a/src/server/shared/Database/Implementation/CharacterDatabase.h	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/shared/Database/Implementation/CharacterDatabase.h	Sat Nov 27 15:52:16 2010 -0300
 @@ -180,6 +180,24 @@
      CHAR_DEL_GAMEOBJECT_RESPAWN_TIMES,
      CHAR_DEL_CRESPAWNTIME,
@@ -867,13 +1005,18 @@ diff -r 62b7591c2cae src/server/shared/Database/Implementation/CharacterDatabase
  
      MAX_CHARACTERDATABASE_STATEMENTS,
  };
-diff -r 62b7591c2cae src/server/worldserver/worldserver.conf.dist
---- a/src/server/worldserver/worldserver.conf.dist	Mon Nov 22 18:36:08 2010 +0100
-+++ b/src/server/worldserver/worldserver.conf.dist	Mon Nov 22 23:05:47 2010 -0300
-@@ -2049,6 +2049,19 @@
- #        Default: 0 - off
- #                 1 - on
- #
+diff -r 943b17263ef6 src/server/worldserver/worldserver.conf.dist
+--- a/src/server/worldserver/worldserver.conf.dist	Sat Nov 27 09:29:18 2010 +0100
++++ b/src/server/worldserver/worldserver.conf.dist	Sat Nov 27 15:52:16 2010 -0300
+@@ -2717,7 +2717,25 @@
+ #        Description: Level requirement for characters to be able to send and receive mails.
+ #        Default:     1
+ 
++
+ LevelReq.Mail = 1
+ 
+-#
+-###################################################################################################
 +#   Anticheat.Enable
 +#        Enable Anticheat System
 +#        Default: 0 - off
@@ -887,13 +1030,7 @@ diff -r 62b7591c2cae src/server/worldserver/worldserver.conf.dist
 +#   Anticheat.ReportsForGMWarnings
 +#	    Enable and set warnings (at which amount will allow the report) for ingame-report, -1 disables it
 +#	    Default: 75
- ###############################################################################
- 
- PlayerStart.AllReputation = 0
-@@ -2072,3 +2085,8 @@
- LevelReq.Auction = 1
- LevelReq.Mail = 1
- DungeonFinder.Enable = 0
++
 +Anticheat.Enable = 0
 +Anticheat.MaxDiffTime = 1000
 +Anticheat.MinDiffTime = 50
